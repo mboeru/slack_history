@@ -6,6 +6,8 @@ import shutil
 import copy
 from datetime import datetime
 
+renamed_channels = ( "bigstep", "coresite-dc-ops" )
+
 # This script finds all channels, private channels and direct messages
 # that your user participates in, downloads the complete history for
 # those converations and writes each conversation out to seperate json files.
@@ -31,6 +33,12 @@ from datetime import datetime
 #	python slack_history.py --token='123token' --dryRun=True
 #	python slack_history.py --token='123token' --skipDirectMessages
 #	python slack_history.py --token='123token' --skipDirectMessages --skipPrivateChannels
+
+def touch(fname):
+    try:
+        os.utime(fname, None)
+    except OSError:
+        open(fname, 'a').close()
 
 
 # fetches the complete message history for a channel/group/im
@@ -84,13 +92,17 @@ def channelRename( oldRoomName, newRoomName ):
 		return
 	mkdir( newRoomName )
 	for fileName in os.listdir( oldRoomName ):
-		shutil.move( os.path.join( oldRoomName, fileName ), newRoomName )
-	os.rmdir( oldRoomName )
+		if not os.path.isfile(os.path.join( oldRoomName, fileName)):
+			shutil.move( os.path.join( oldRoomName, fileName ), newRoomName )
+	#os.rmdir( oldRoomName )
+	shutil.rmtree( oldRoomName )
 
 
 def writeMessageFile( fileName, messages ):
-	with open(fileName, 'w') as outFile:
-		json.dump( messages, outFile, indent=4)
+	touch(fileName)
+	if os.path.isfile(fileName):
+		with open(fileName, 'w') as outFile:
+			json.dump( messages, outFile, indent=4)
 
 
 # parse messages by date
@@ -99,29 +111,31 @@ def parseMessages( parentDir, roomDir, messages, roomType ):
 
 	currentFileDate = ''
 	currentMessages = []
-	for message in messages:
-		#first store the date of the next message
-		ts = parseTimeStamp( message['ts'] )
-		fileDate = '{:%Y-%m-%d}'.format(ts)
+	#print roomDir	
+	if roomDir not in renamed_channels:
+		for message in messages:
+			#first store the date of the next message
+			ts = parseTimeStamp( message['ts'] )
+			fileDate = '{:%Y-%m-%d}'.format(ts)
 
-		#if it's on a different day, write out the previous day's messages
-		if fileDate != currentFileDate:
-			outFileName = '{parent}/{room}/{file}.json'.format( parent = parentDir, room = roomDir, file = currentFileDate )
-			writeMessageFile( outFileName, currentMessages )
-			currentFileDate = fileDate
-			currentMessages = []
+			#if it's on a different day, write out the previous day's messages
+			if fileDate != currentFileDate:
+				outFileName = '{parent}/{room}/{file}.json'.format( parent = parentDir, room = roomDir, file = currentFileDate )
+				writeMessageFile( outFileName, currentMessages )
+				currentFileDate = fileDate
+				currentMessages = []
 
-		# check if current message is a name change
-		# dms won't have name change events
-		if roomType != "im" and ( 'subtype' in message ) and message['subtype'] == nameChangeFlag:
-			roomDir = message['name']
-			oldRoomPath = '{parent}/{room}'.format( parent = parentDir, room = message['old_name'] )
-			newRoomPath = '{parent}/{room}'.format( parent = parentDir, room = roomDir )
-			channelRename( oldRoomPath, newRoomPath )
+			# check if current message is a name change
+			# dms won't have name change events
+			if roomType != "im" and ( 'subtype' in message ) and message['subtype'] == nameChangeFlag:
+				roomDir = message['name']
+				oldRoomPath = '{parent}/{room}'.format( parent = parentDir, room = message['old_name'] )
+				newRoomPath = '{parent}/{room}'.format( parent = parentDir, room = roomDir )
+				channelRename( oldRoomPath, newRoomPath )
 
-		currentMessages.append( message )
-	outFileName = '{parent}/{room}/{file}.json'.format( parent = parentDir, room = roomDir, file = currentFileDate )
-	writeMessageFile( outFileName, currentMessages )
+			currentMessages.append( message )
+		outFileName = '{parent}/{room}/{file}.json'.format( parent = parentDir, room = roomDir, file = currentFileDate )
+		writeMessageFile( outFileName, currentMessages )
 
 
 # fetch and write history for all public channels
