@@ -6,7 +6,7 @@ import shutil
 import copy
 from datetime import datetime
 
-renamed_channels = ( "bigstep", "coresite-dc-ops" )
+renamed_channels = ( "bigstep", "dcops_us_chg_cst01" )
 
 # This script finds all channels, private channels and direct messages
 # that your user participates in, downloads the complete history for
